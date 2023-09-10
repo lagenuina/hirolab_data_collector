@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- ============================ SETTINGS ============================= -->
+
+    <arg
+    name="camera_name" 
+    default="camera"/>
+
+    <arg 
+    name="image_rotation" 
+    default="90"/>
+
+    <!-- ======================== END OF SETTINGS ========================== -->
+    
+    <!-- Pose landmarks estimator: -->     
+    <node 
+    pkg="data_collector" 
+    type="pose_landmarks.py"
+    name="pose_landmarks" 
+    output="screen">
+        <param 
+        name="camera_name" 
+        value="$(arg camera_name)"/>
+        <param 
+        name="image_rotation" 
+        value="$(arg image_rotation)"/>
+    </node>     
+</launch>

@@ -7,9 +7,16 @@ import rospy
 import cv2
 from cv_bridge import (CvBridge)
 import mediapipe as mp
+import pyrealsense2 as rs2
+import numpy as np
+import math
 
 from std_msgs.msg import (Bool)
-from sensor_msgs.msg import (Image)
+from sensor_msgs.msg import (
+    Image,
+    CameraInfo,
+)
+from geometry_msgs.msg import (Point)
 
 from data_collector.msg import (UpperBodyKeypoints)
 
@@ -32,6 +39,10 @@ class PoseLandmarks:
         # # Private constants:
         self.__CAMERA_NAME = camera_name
         self.__IMAGE_ROTATION = image_rotation
+        self.__HEIGHT = 0
+        self.__WIDTH = 0
+        self.__IMAGE_CENTER = None
+        self.__ROTATION_MATRIX = None
 
         self.__BRIDGE = CvBridge()
 
@@ -39,17 +50,20 @@ class PoseLandmarks:
         self.__MP_DRAWING = mp.solutions.drawing_utils
         self.__MP_POSE = mp.solutions.pose
         self.__POSE = self.__MP_POSE.Pose(
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5,
+            min_detection_confidence=0.85,
+            min_tracking_confidence=0.85,
         )
 
         # # Public constants:
         self.NODE_NAME = node_name
 
         # # Private variables:
-        self.__cv_image = None
+        self.__cv_color_image = None
+        self.__cv_depth_image = None
+        self.__instristics = None
+        self.__pose_landmarks = None
         self.__pose_landmarks_frame = None
-        self.__keypoints = UpperBodyKeypoints()
+        self.__keypoints = list()
 
         # # Public variables:
 
@@ -101,6 +115,16 @@ class PoseLandmarks:
             Image,
             self.__realsense_color_callback,
         )
+        rospy.Subscriber(
+            f'/{self.__CAMERA_NAME}/aligned_depth_to_color/image_raw',
+            Image,
+            self.__realsense_alighed_depth_callback,
+        )
+        rospy.Subscriber(
+            f'/{self.__CAMERA_NAME}/aligned_depth_to_color/camera_info',
+            CameraInfo,
+            self.__realsense_alighed_depth_info_callback,
+        )
 
     # # Dependency status callbacks:
     # NOTE: each dependency topic should have a callback function, which will
@@ -114,13 +138,96 @@ class PoseLandmarks:
 
         """
 
-        if not self.__is_initialized:
-            self.__dependency_status['realsense_camera'] = True
-
-        self.__cv_image = self.__BRIDGE.imgmsg_to_cv2(
-            message,
+        frame = self.__BRIDGE.imgmsg_to_cv2(
+            img_msg=message,
             desired_encoding='passthrough',
         )
+
+        original_height, original_width = message.height, message.width
+
+        if not self.__dependency_status['realsense_camera']:
+            # getRotationMatrix2D needs coordinates in reverse order (width,
+            # height) compared to shape.
+            self.__IMAGE_CENTER = (original_width // 2, original_height // 2)
+
+            self.__ROTATION_MATRIX = cv2.getRotationMatrix2D(
+                self.__IMAGE_CENTER,
+                self.__IMAGE_ROTATION,
+                1.0,
+            )
+
+            # Rotation calculates the cos and sin, taking absolutes of those.
+            abs_cos = abs(self.__ROTATION_MATRIX[0, 0])
+            abs_sin = abs(self.__ROTATION_MATRIX[0, 1])
+
+            # Find the new width and height bounds.
+            self.__WIDTH = int(
+                original_height * abs_sin + original_width * abs_cos
+            )
+            self.__HEIGHT = int(
+                original_height * abs_cos + original_width * abs_sin
+            )
+
+            # Subtract old image center (bringing image back to origo) and
+            # adding the new image center coordinates.
+            self.__ROTATION_MATRIX[
+                0, 2] += (self.__WIDTH / 2 - self.__IMAGE_CENTER[0])
+            self.__ROTATION_MATRIX[
+                1, 2] += (self.__HEIGHT / 2 - self.__IMAGE_CENTER[1])
+
+            self.__dependency_status['realsense_camera'] = True
+
+        # Rotate image with the new bounds and translated rotation matrix.
+        self.__cv_color_image = cv2.warpAffine(
+            frame,
+            self.__ROTATION_MATRIX,
+            (self.__WIDTH, self.__HEIGHT),
+        )
+
+    def __realsense_alighed_depth_callback(self, message):
+        """
+
+        """
+
+        if not self.__is_initialized:
+            return
+
+        frame = self.__BRIDGE.imgmsg_to_cv2(
+            img_msg=message,
+            desired_encoding=message.encoding,
+        )
+
+        # Apply the rotation to the image.
+        self.__cv_depth_image = cv2.warpAffine(
+            frame,
+            self.__ROTATION_MATRIX,
+            (self.__WIDTH, self.__HEIGHT),
+        )
+
+    def __realsense_alighed_depth_info_callback(self, message):
+        """
+
+        """
+
+        # Set the variable once on the first topic callback.
+        if self.__instristics:
+            return
+
+        self.intrinsics = rs2.intrinsics()
+        self.intrinsics.width = message.width
+        self.intrinsics.height = message.height
+        self.intrinsics.ppx = message.K[2]
+        self.intrinsics.ppy = message.K[5]
+        self.intrinsics.fx = message.K[0]
+        self.intrinsics.fy = message.K[4]
+
+        if message.distortion_model == 'plumb_bob':
+            self.intrinsics.model = rs2.distortion.brown_conrady
+
+        elif message.distortion_model == 'equidistant':
+            self.intrinsics.model = rs2.distortion.kannala_brandt4
+
+        self.intrinsics.coeffs = [i for i in message.D]
 
     # # Timer functions:
 
@@ -154,6 +261,9 @@ class PoseLandmarks:
                     # # Emergency actions on lost connection:
                     # NOTE (optionally): Add code, which needs to be executed if
                     # connection to any of dependencies was lost.
+
+                    if key == 'realsense_camera':
+                        self.__instristics = None
 
                 self.__dependency_status[key] = False
 
@@ -206,6 +316,9 @@ class PoseLandmarks:
         - visibility: The likelihood of the landmark being
         visible within the image.
 
+        X is horizontal, Y is vertical. Top left is (0.0, 0.0), bottom right is
+        (1.0, 1.0).
+
         0 - nose
         1 - left eye (inner)
         2 - left eye
@@ -249,19 +362,24 @@ class PoseLandmarks:
         pose_results = None
 
         # If no image is available.
-        if self.__cv_image is None:
+        if self.__cv_color_image is None:
             return
 
-        try:
-            frame = self.__cv_image
+        frame = self.__cv_color_image
 
-            frame = cv2.cvtColor(
-                frame,
-                cv2.COLOR_BGR2RGB,
-            )
+        frame = cv2.cvtColor(
+            frame,
+            cv2.COLOR_BGR2RGB,
+        )
+
+        try:
 
             # Process the frame for pose detection.
             pose_results = self.__POSE.process(frame)
+
+            # If no landmarks were detected.
+            if not pose_results.pose_landmarks:
+                return
 
             # Draw pose landmarks on the frame.
             self.__MP_DRAWING.draw_landmarks(
@@ -270,35 +388,18 @@ class PoseLandmarks:
                 self.__MP_POSE.POSE_CONNECTIONS,
             )
 
-            # Calculate the rotation matrix.
-            height, width = frame.shape[:2]
-            rotation_matrix = cv2.getRotationMatrix2D(
-                (width / 2, height / 2),
-                self.__IMAGE_ROTATION,
-                1,
-            )
-
-            # Apply the rotation to the image.
-            frame = cv2.warpAffine(
-                frame,
-                rotation_matrix,
-                (width, height),
-            )
-
-            frame = cv2.flip(frame, 1)
-
-            self.__pose_landmarks_frame = frame
-
-            # If no landmarks were detected.
-            if not pose_results.pose_landmarks:
-                return
-
-            self.__update_upperbody_keypoints(
-                pose_results.pose_landmarks.landmark
-            )
-
         except Exception as e:
             print(e)
+
+        # frame = cv2.flip(frame, 1)
+
+        self.__pose_landmarks_frame = frame
+
+        self.__pose_landmarks = pose_results
+
+        self.__update_upperbody_keypoints(
+            self.__pose_landmarks.pose_landmarks.landmark
+        )
 
     def __publish_landmarks_image(self):
         """
@@ -315,55 +416,108 @@ class PoseLandmarks:
 
         self.__pose_landmarks_image.publish(image_message)
 
-    def __update_upperbody_keypoints(self, pose_landmarks):
+    def __publish_upperbody_keypoints(self):
         """
         
         """
 
-        self.__keypoints.left_shoulder.x = pose_landmarks[11].x
-        self.__keypoints.left_shoulder.y = pose_landmarks[11].y
-        self.__keypoints.left_shoulder.z = pose_landmarks[11].z
+        keypoints = UpperBodyKeypoints()
+        keypoints.keypoints = self.__keypoints
 
-        self.__keypoints.right_shoulder.x = pose_landmarks[12].x
-        self.__keypoints.right_shoulder.y = pose_landmarks[12].y
-        self.__keypoints.right_shoulder.z = pose_landmarks[12].z
+        self.__upperbody_keypoints.publish(keypoints)
 
-        self.__keypoints.left_elbow.x = pose_landmarks[13].x
-        self.__keypoints.left_elbow.y = pose_landmarks[13].y
-        self.__keypoints.left_elbow.z = pose_landmarks[13].z
+    def __get_3d_coordinates(self, pixel_x, pixel_y):
+        """
+        https://medium.com/@yasuhirachiba/converting-2d-image-coordinates-to-3d-coordinates-using-ros-intel-realsense-d435-kinect-88621e8e733a
 
-        self.__keypoints.right_elbow.x = pose_landmarks[14].x
-        self.__keypoints.right_elbow.y = pose_landmarks[14].y
-        self.__keypoints.right_elbow.z = pose_landmarks[14].z
+        """
 
-        self.__keypoints.left_wrist.x = pose_landmarks[15].x
-        self.__keypoints.left_wrist.y = pose_landmarks[15].y
-        self.__keypoints.left_wrist.z = pose_landmarks[15].z
+        x_min = pixel_x - 5
+        x_max = pixel_x + 5
+        y_min = pixel_y - 5
+        y_max = pixel_y + 5
 
-        self.__keypoints.right_wrist.x = pose_landmarks[16].x
-        self.__keypoints.right_wrist.y = pose_landmarks[16].y
-        self.__keypoints.right_wrist.z = pose_landmarks[16].z
+        depth = np.mean(self.__cv_depth_image[y_min:y_max, x_min:x_max])
 
-        # Calculate torso and waist coordinates:
-        self.__keypoints.chest.x = (
-            (pose_landmarks[11].x + pose_landmarks[12].x) / 2
-        )
-        self.__keypoints.chest.y = (
-            (pose_landmarks[11].y + pose_landmarks[12].y) / 2
-        )
-        self.__keypoints.chest.z = (
-            (pose_landmarks[11].z + pose_landmarks[12].z) / 2
+        coordinates_3d = rs2.rs2_deproject_pixel_to_point(
+            self.intrinsics,
+            [pixel_x, pixel_y],
+            depth,
         )
 
-        self.__keypoints.waist.x = (
-            (pose_landmarks[23].x + pose_landmarks[24].x) / 2
+        keypoint = Point()
+
+        # mm to m.
+        keypoint.y = -coordinates_3d[0] / 1000
+        keypoint.z = -coordinates_3d[1] / 1000
+        keypoint.x = coordinates_3d[2] / 1000
+
+        # Protection against out of bounds keypoints. Landmark detection model
+        # can predict a landmark location outside of the image. However, there
+        # are no corresponding depth image values, hence, the 3d coordinate
+        # values will be nan.
+
+        # FIXME: Need to add check for the outside of the image keypoints on the
+        # previous steps.
+        if (
+            math.isnan(keypoint.x) or math.isnan(keypoint.y)
+            or math.isnan(keypoint.z)
+        ):
+            return False
+
+        return keypoint
+
+    def __update_upperbody_keypoints(self, pose_landmarks):
+        """
+        """
+
+        keypoints = list()
+
+        # 0 - left_shoulder, 1 - right_shoulder,
+        # 2 - left_elbow, 3 - right_elbow,
+        # 4 - left_wrist, 5 - right_wrist.
+        for i in range(11, 17):
+
+            keypoint = self.__get_3d_coordinates(
+                pixel_x=int(pose_landmarks[i].x * self.__WIDTH),
+                pixel_y=int(pose_landmarks[i].y * self.__HEIGHT),
+            )
+
+            keypoints.append(keypoint)
+
+        # 6 - chest.
+        keypoint = self.__get_3d_coordinates(
+            pixel_x=int(
+                ((pose_landmarks[11].x + pose_landmarks[12].x) / 2)
+                * self.__WIDTH
+            ),
+            pixel_y=int(
+                ((pose_landmarks[11].y + pose_landmarks[12].y) / 2)
+                * self.__HEIGHT
+            ),
         )
-        self.__keypoints.waist.y = (
-            (pose_landmarks[23].y + pose_landmarks[24].y) / 2
+
+        keypoints.append(keypoint)
+
+        # 7 - waist.
+        keypoint = self.__get_3d_coordinates(
+            pixel_x=int(
+                ((pose_landmarks[23].x + pose_landmarks[24].x) / 2)
+                * self.__WIDTH
+            ),
+            pixel_y=int(
+                ((pose_landmarks[23].y + pose_landmarks[24].y) / 2)
+                * self.__HEIGHT
+            ),
         )
-        self.__keypoints.waist.z = (
-            (pose_landmarks[23].z + pose_landmarks[24].z) / 2
-        )
+
+        keypoints.append(keypoint)
+
+        # Protection against out of bounds keypoints.
+        if any(item is False for item in keypoints):
+            return
+
+        self.__keypoints = keypoints
 
     # # Public methods:
     def main_loop(self):
@@ -381,7 +535,7 @@ class PoseLandmarks:
         self.__pose_estimation()
 
         self.__publish_landmarks_image()
-        self.__upperbody_keypoints.publish(self.__keypoints)
+        self.__publish_upperbody_keypoints()
 
     def node_shutdown(self):
         """

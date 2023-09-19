@@ -10,6 +10,11 @@ import mediapipe as mp
 import pyrealsense2 as rs2
 import numpy as np
 import math
+from copy import (
+    copy,
+    deepcopy,
+)
+import warnings
 
 from std_msgs.msg import (Bool)
 from sensor_msgs.msg import (
@@ -31,6 +36,10 @@ class PoseLandmarks:
         node_name,
         camera_name,
         image_rotation,
+        depth_averaging_enable,
+        depth_averaging_count,
+        coordinates_averaging_enable,
+        coordinates_averaging_count,
     ):
         """
         
@@ -43,14 +52,25 @@ class PoseLandmarks:
         self.__WIDTH = 0
         self.__IMAGE_CENTER = None
         self.__ROTATION_MATRIX = None
+        self.__DEPTH_AVERAGING = {
+            'enable': depth_averaging_enable,
+            'count': depth_averaging_count,
+        }
+        self.__COORDINATES_AVERAGING = {
+            'enable': coordinates_averaging_enable,
+            'count': coordinates_averaging_count,
+        }
 
         self.__BRIDGE = CvBridge()
 
         # Pose landmarks detection:
         self.__MP_DRAWING = mp.solutions.drawing_utils
         self.__MP_POSE = mp.solutions.pose
+        # Settings: https://github.com/google/mediapipe/blob/master/docs/solutions/pose.md
         self.__POSE = self.__MP_POSE.Pose(
-            min_detection_confidence=0.85,
+            model_complexity=2,  # 0 - Lite, 1 - Full, 2 - Heavy.
+            smooth_landmarks=True,
+            min_detection_confidence=0.6,
             min_tracking_confidence=0.85,
         )
 
@@ -60,10 +80,24 @@ class PoseLandmarks:
         # # Private variables:
         self.__cv_color_image = None
         self.__cv_depth_image = None
+        self.__cv_depth_image_snapshot = None
         self.__instristics = None
+
         self.__pose_landmarks = None
         self.__pose_landmarks_frame = None
         self.__keypoints = list()
+
+        self.__depths = [[], [], [], [], [], [], [], []]
+        self.__coordinates = [
+            np.array([]),
+            np.array([]),
+            np.array([]),
+            np.array([]),
+            np.array([]),
+            np.array([]),
+            np.array([]),
+            np.array([]),
+        ]
 
         # # Public variables:
 
@@ -361,11 +395,18 @@ class PoseLandmarks:
 
         pose_results = None
 
-        # If no image is available.
+        # If no color image is available.
         if self.__cv_color_image is None:
             return
 
         frame = self.__cv_color_image
+
+        # Snapshot of corresponding depth image.
+        self.__cv_depth_image_snapshot = deepcopy(self.__cv_depth_image)
+
+        # If no depth image is available.
+        if self.__cv_depth_image_snapshot is None:
+            return
 
         frame = cv2.cvtColor(
             frame,
@@ -426,7 +467,7 @@ class PoseLandmarks:
 
         self.__upperbody_keypoints.publish(keypoints)
 
-    def __get_3d_coordinates(self, pixel_x, pixel_y):
+    def __get_3d_coordinates(self, pixel_x, pixel_y, keypoint_i):
         """
         https://medium.com/@yasuhirachiba/converting-2d-image-coordinates-to-3d-coordinates-using-ros-intel-realsense-d435-kinect-88621e8e733a
 
@@ -437,20 +478,33 @@ class PoseLandmarks:
         y_min = pixel_y - 5
         y_max = pixel_y + 5
 
-        depth = np.mean(self.__cv_depth_image[y_min:y_max, x_min:x_max])
+        # I expect to see RuntimeWarnings in this block.
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', category=RuntimeWarning)
+            depth = np.mean(
+                self.__cv_depth_image_snapshot[y_min:y_max, x_min:x_max]
+            )
+
+        if self.__DEPTH_AVERAGING['enable']:
+            # Initialize values.
+            if len(self.__depths[keypoint_i]) == 0:
+                self.__depths[keypoint_i] = (
+                    [depth] * self.__DEPTH_AVERAGING['count']
+                )
+
+            self.__depths[keypoint_i].pop(0)
+            self.__depths[keypoint_i].append(depth)
+
+            depth_averaged = sum(self.__depths[keypoint_i]
+                                ) / len(self.__depths[keypoint_i])
+
+            depth = copy(depth_averaged)
 
         coordinates_3d = rs2.rs2_deproject_pixel_to_point(
             self.intrinsics,
             [pixel_x, pixel_y],
             depth,
         )
-
-        keypoint = Point()
-
-        # mm to m.
-        keypoint.y = -coordinates_3d[0] / 1000
-        keypoint.z = -coordinates_3d[1] / 1000
-        keypoint.x = coordinates_3d[2] / 1000
 
         # Protection against out of bounds keypoints. Landmark detection model
         # can predict a landmark location outside of the image. However, there
@@ -459,11 +513,57 @@ class PoseLandmarks:
 
         # FIXME: Need to add check for the outside of the image keypoints on the
         # previous steps.
-        if (
-            math.isnan(keypoint.x) or math.isnan(keypoint.y)
-            or math.isnan(keypoint.z)
-        ):
+        if any(math.isnan(x) for x in coordinates_3d):
             return False
+
+        if self.__COORDINATES_AVERAGING['enable']:
+            # Initialize values.
+            if len(self.__coordinates[keypoint_i]) == 0:
+                for _ in range(self.__COORDINATES_AVERAGING['count']):
+                    self.__coordinates[keypoint_i] = np.append(
+                        self.__coordinates[keypoint_i],
+                        np.array(
+                            [
+                                coordinates_3d[0],
+                                coordinates_3d[1],
+                                coordinates_3d[2],
+                            ]
+                        ),
+                    )
+
+                self.__coordinates[keypoint_i] = (
+                    self.__coordinates[keypoint_i]
+                ).reshape(-1, 3)
+
+            # Update the list.
+            self.__coordinates[keypoint_i] = np.delete(
+                self.__coordinates[keypoint_i], 0, axis=0
+            )
+
+            self.__coordinates[keypoint_i] = np.append(
+                self.__coordinates[keypoint_i],
+                np.array(
+                    [
+                        coordinates_3d[0],
+                        coordinates_3d[1],
+                        coordinates_3d[2],
+                    ]
+                )
+            ).reshape(-1, 3)
+
+            average_coordinates = np.mean(
+                self.__coordinates[keypoint_i],
+                axis=0,
+            )
+
+            coordinates_3d = copy(average_coordinates)
+
+        keypoint = Point()
+
+        # mm to m.
+        keypoint.y = -coordinates_3d[0] / 1000
+        keypoint.z = -coordinates_3d[1] / 1000
+        keypoint.x = coordinates_3d[2] / 1000
 
         return keypoint
 
@@ -481,6 +581,7 @@ class PoseLandmarks:
             keypoint = self.__get_3d_coordinates(
                 pixel_x=int(pose_landmarks[i].x * self.__WIDTH),
                 pixel_y=int(pose_landmarks[i].y * self.__HEIGHT),
+                keypoint_i=i - 11,
             )
 
             keypoints.append(keypoint)
@@ -495,6 +596,7 @@ class PoseLandmarks:
                 ((pose_landmarks[11].y + pose_landmarks[12].y) / 2)
                 * self.__HEIGHT
             ),
+            keypoint_i=6,
         )
 
         keypoints.append(keypoint)
@@ -509,6 +611,7 @@ class PoseLandmarks:
                 ((pose_landmarks[23].y + pose_landmarks[24].y) / 2)
                 * self.__HEIGHT
             ),
+            keypoint_i=7,
         )
 
         keypoints.append(keypoint)
@@ -576,11 +679,31 @@ def main():
         param_name=f'{node_name}/image_rotation',
         default=90,
     )
+    depth_averaging_enable = rospy.get_param(
+        param_name=f'{node_name}/depth_averaging_enable',
+        default=True,
+    )
+    depth_averaging_count = rospy.get_param(
+        param_name=f'{node_name}/depth_averaging_count',
+        default=10,
+    )
+    coordinates_averaging_enable = rospy.get_param(
+        param_name=f'{node_name}/coordinates_averaging_enable',
+        default=True,
+    )
+    coordinates_averaging_count = rospy.get_param(
+        param_name=f'{node_name}/coordinates_averaging_count',
+        default=5,
+    )
 
     pose_landmarks = PoseLandmarks(
         node_name=node_name,
         camera_name=camera_name,
         image_rotation=image_rotation,
+        depth_averaging_enable=depth_averaging_enable,
+        depth_averaging_count=depth_averaging_count,
+        coordinates_averaging_enable=coordinates_averaging_enable,
+        coordinates_averaging_count=coordinates_averaging_count,
     )
 
     rospy.on_shutdown(pose_landmarks.node_shutdown)

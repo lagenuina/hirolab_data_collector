@@ -528,9 +528,14 @@ class DataWriter:
         
         """
 
-        # Save to a .tmp file first to avoid corrupting the original file in
-        # case of a failure:
         try:
+            # Ensure the directory exists
+            directory = os.path.dirname(self.__output_file_path)
+            if not os.path.exists(directory):
+                os.makedirs(directory)
+
+            # Save to a .tmp file first to avoid corrupting the original file in
+            # case of a failure:
             temp_file_path = self.__output_file_path + '.tmp'
             self.data_frame.to_csv(
                 temp_file_path,
@@ -586,9 +591,13 @@ def main():
         default=1000,
     )
 
-    output_file_path = rospy.get_param(
-        param_name=f'{rospy.get_name()}/output_file_path',
-        default='name_p0_m0_t0.csv',
+    output_folder_path = rospy.get_param(
+        param_name=f'{rospy.get_name()}/output_folder_path',
+        # default='',
+    )
+    output_file_name = rospy.get_param(
+        param_name=f'{rospy.get_name()}/output_file_name',
+        # default='experimentname_p0_m0_t0.csv',
     )
     data_recording_period = rospy.get_param(
         param_name=f'{rospy.get_name()}/data_recording_period',
@@ -598,31 +607,34 @@ def main():
         param_name=f'{rospy.get_name()}/file_writing_period',
         default=10,
     )
+    topics_specifiers_columns = rospy.get_param(
+        param_name=f'{rospy.get_name()}/topics_specifiers_columns',
+    )
 
-    topic_names = [
-        '/right/controller_feedback/joystick',
-        '/right/controller_feedback/joystick',
-        # '/right/controller_feedback/joystick',
-        # '/right/controller_feedback/joystick',
-        # '/right/controller_feedback/pose',
-        '/data_writer/recorder_status',
+    # Split the string and remove whitespaces.
+    topics_specifiers_columns = [
+        s for s in topics_specifiers_columns.split(' ') if s != ''
     ]
-    topic_specifiers = [
-        # '',
-        '.button',
-        '.position_x',
-        # '.position_y',
-        # '.position.x',
-        '',
-    ]
-    column_names = [
-        # 'right_joystick',
-        'right_joystick_button',
-        'right_joystick_x',
-        # 'right_joystick_y',
-        # 'right_pose'
-        'recorder_status',
-    ]
+
+    if len(topics_specifiers_columns) % 3 != 0:
+        raise ValueError(
+            'The length of topics_specifiers_columns should be divisible by 3.'
+        )
+
+    topic_names = []
+    topic_specifiers = []
+    column_names = []
+
+    for i in range(int(len(topics_specifiers_columns) / 3)):
+        topic_names.append(topics_specifiers_columns[3 * i])
+
+        if topics_specifiers_columns[3 * i + 1] == '.':
+            topic_specifiers.append('')
+
+        else:
+            topic_specifiers.append(topics_specifiers_columns[3 * i + 1])
+
+        column_names.append(topics_specifiers_columns[3 * i + 2])
 
     topic_subscriber_instances = []
 
@@ -634,6 +646,20 @@ def main():
         )
 
         topic_subscriber_instances.append(topic_subscriber)
+
+    # Get absolute output file path:
+    sub_path = output_file_name.split('.')[0].split('_')
+
+    experiment_name = sub_path[0]
+    participant_number = sub_path[1]
+    mode_number = sub_path[2]
+    trial_number = sub_path[3]
+
+    output_file_path = (
+        f'{output_folder_path}'
+        f'/{experiment_name}/{participant_number}/{mode_number}/{trial_number}'
+        f'/{output_file_name}'
+    )
 
     data_writer = DataWriter(
         node_name=node_name,

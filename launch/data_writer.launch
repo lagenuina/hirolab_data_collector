@@ -1,0 +1,110 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- ============================ SETTINGS ============================= -->
+
+    <!-- Node frequency: the frequency [Hz] which rate.sleep() function will
+    attempt to maintain in the main_loop. -->
+    <arg 
+    name="node_frequency" 
+    default="1000"/>
+
+    <!-- Output folder path: the absolute path to the main data folder (no slash
+    at the end). The standard file stucture will be generated in this folder:
+    
+    experiment (output_folder_path):
+    |_____p0 (folder):
+    |   |
+    |   |_____m0 (folder):
+    |   |   |
+    |   |   |_____t0 (folder):
+    |   |   |_____t1 (folder):
+    |   |   |_____...
+    |   |   
+    |   |_____m1 (folder):
+    |   |   |_____t0 (folder):
+    |   |   |_____t1 (folder):
+    |   |   |_____...
+    |   |   
+    |   |_____...
+    |
+    |_____p1 (folder):
+    |   |
+    |   |_____...
+    |
+    |_____...
+
+     -->
+    <arg
+    name="output_folder_path" 
+    default=""/>
+
+    <!-- Output file name: the file name in the following format:
+    "experiment-name_p0_m0_t0.csv" (no slashes). Experiment-name should be
+    separated with dashes. -->
+    <arg
+    name="output_file_name" 
+    default=""/>
+
+    <!-- Data recording period: time in seconds between data storing. -->
+    <arg 
+    name="data_recording_period" 
+    default="0.5"/>
+
+    <!-- File writing period: time in seconds between file writings. -->
+    <arg 
+    name="file_writing_period" 
+    default="10"/>
+
+    <!-- Topics Specifiers Columns: specifies which data topics are recordered.
+    Format (a separate line for each entry, whitespaces between, a dot "." in
+    front of the message_specifier): 
+    "/topic_name .message_specifier csv_column_name"
+
+    /topic_name: is the topic name. 
+    .message_specifier: specifies which field within the topic message should be
+    recorded. If no message_specifier is required, place a single dot.
+    csv_column_name - the column name in the output .csv file, where the data
+    will be stored. 
+    
+    Example: 
+    default="
+    /right/controller_feedback/joystick . right_joystick
+    /right/controller_feedback/joystick .button right_joystick_button
+    "/>  
+ 
+    -->
+    <arg 
+    name="topics_specifiers_columns" 
+    default="
+    /data_writer/recorder_status . data_writer_status
+    "/>
+    <!-- default="$(find data_collector)/topics_specifiers_columns.yaml"/> -->
+
+    <!-- ======================== END OF SETTINGS ========================== -->
+    
+    <!-- Data writer: -->     
+    <node 
+    pkg="data_collector" 
+    type="data_writer.py"
+    name="data_writer" 
+    output="screen">
+        <param 
+        name="node_frequency" 
+        value="$(arg node_frequency)"/>
+        <param 
+        name="output_folder_path" 
+        value="$(arg output_folder_path)"/>
+        <param 
+        name="output_file_name" 
+        value="$(arg output_file_name)"/>
+        <param 
+        name="data_recording_period" 
+        value="$(arg data_recording_period)"/>
+        <param 
+        name="file_writing_period" 
+        value="$(arg file_writing_period)"/>
+        <param 
+        name="topics_specifiers_columns" 
+        value="$(arg topics_specifiers_columns)"/>
+    </node>     
+</launch>

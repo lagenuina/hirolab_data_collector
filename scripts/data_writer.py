@@ -303,39 +303,59 @@ class DataWriter:
 
         self.__recorder_status = 'recording'
 
-        return
+        return []
 
     def __pause_recording_handler(self, request):
         """
         
         """
 
-        self.write_to_csv()
+        if self.__recorder_status == 'recording':
+            self.write_to_csv()
 
-        rospy.logwarn(
-            f'{self.__NODE_NAME}:'
-            f'\n{self.__output_file_path} recording has paused.'
-        )
+            rospy.logwarn(
+                f'{self.__NODE_NAME}:'
+                f'\n{self.__output_file_path} recording has paused.'
+            )
 
-        self.__recorder_status = 'paused'
+            self.__recorder_status = 'paused'
 
-        return
+        elif self.__recorder_status == 'paused':
+            rospy.logwarn(
+                f'{self.__NODE_NAME}: '
+                f'\nThe current recording has been already paused!'
+            )
+
+        elif self.__recorder_status == 'finished':
+            rospy.logwarn(
+                f'{self.__NODE_NAME}: Nothing to pause.'
+                f'\nThe previous recording has been already finished!'
+            )
+
+        return []
 
     def __finish_recording_handler(self, request):
         """
         
         """
 
-        self.write_to_csv()
+        if self.__recorder_status != 'finished':
+            self.write_to_csv()
 
-        rospy.logwarn(
-            f'{self.__NODE_NAME}:'
-            f'\n{self.__output_file_path} recording has finished.'
-        )
+            rospy.logwarn(
+                f'{self.__NODE_NAME}:'
+                f'\n{self.__output_file_path} recording has finished.'
+            )
 
-        self.__recorder_status = 'finished'
+            self.__recorder_status = 'finished'
 
-        return
+        else:
+            rospy.logwarn(
+                f'{self.__NODE_NAME}: Nothing to finish.'
+                f'\nThe previous recording has been already finished!'
+            )
+
+        return []
 
     # # Topic callbacks:
 
@@ -529,7 +549,7 @@ class DataWriter:
         """
 
         try:
-            # Ensure the directory exists
+            # Ensure the directory exists.
             directory = os.path.dirname(self.__output_file_path)
             if not os.path.exists(directory):
                 os.makedirs(directory)

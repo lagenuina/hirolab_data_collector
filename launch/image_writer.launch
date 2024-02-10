@@ -1,0 +1,99 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- ============================ SETTINGS ============================= -->
+
+    <!-- Node frequency: the frequency [Hz] which rate.sleep() function will
+    attempt to maintain in the main_loop. -->
+    <arg 
+    name="node_frequency" 
+    default="100"/>
+
+    <!-- Output folder path: the absolute path to the main data folder (no slash
+    at the end). The standard file structure will be generated in this folder:
+    
+    experiment (output_folder_path):
+    |_____p0 (folder):
+    |   |
+    |   |_____m0 (folder):
+    |   |   |
+    |   |   |_____t0 (folder):
+    |   |   |_____t1 (folder):
+    |   |   |_____...
+    |   |   
+    |   |_____m1 (folder):
+    |   |   |_____t0 (folder):
+    |   |   |_____t1 (folder):
+    |   |   |_____...
+    |   |   
+    |   |_____...
+    |
+    |_____p1 (folder):
+    |   |
+    |   |_____...
+    |
+    |_____...
+
+     -->
+    <arg
+    name="output_folder_path" 
+    default=""/>
+
+    <!-- Output file name: the file name in the following format:
+    "experiment-name_p0_m0_t0.png" (no slashes). Experiment-name should be
+    separated with dashes. -->
+    <arg
+    name="output_file_name" 
+    default=""/>
+
+    <!-- Image writing period: time [seconds] between file writings. -->
+    <arg 
+    name="image_writing_period" 
+    default="0.5"/>
+
+    <!-- Camera name: used as a namespace for the node. -->
+    <arg 
+    name="camera_name" 
+    default="camera"/>
+
+    <!-- Image topic: images from this topic [sensor_msgs/Image] will be send
+    over UDP. -->
+    <arg 
+    name="image_topic" 
+    default="/camera/color/image_raw"/>
+
+    <!-- Enable imshow: show the incoming image for debugging purposes. -->
+    <arg 
+    name="enable_imshow" 
+    default="false"/>
+
+    <!-- ======================== END OF SETTINGS ========================== -->
+
+
+    <!-- Image writer: -->
+    <group ns="/$(arg camera_name)">
+        <node 
+        pkg="data_collector" 
+        type="image_writer.py" 
+        name="image_writer" 
+        output="screen">
+            <param 
+            name="node_frequency" 
+            value="$(arg node_frequency)"/>
+            <param 
+            name="output_folder_path" 
+            value="$(arg output_folder_path)"/>
+            <param 
+            name="output_file_name" 
+            value="$(arg output_file_name)"/>
+            <param 
+            name="image_writing_period" 
+            value="$(arg image_writing_period)"/>
+            <param 
+            name="image_topic" 
+            value="$(arg image_topic)"/>
+            <param 
+            name="enable_imshow" 
+            value="$(arg enable_imshow)"/>
+        </node>
+    </group>
+</launch>

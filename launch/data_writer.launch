@@ -36,7 +36,7 @@
      -->
     <arg
     name="output_folder_path" 
-    default=""/>
+    default="/home/fetch/data"/>
 
     <!-- Output file name: the file name in the following format:
     "experiment-name_p0_m0_t0.csv" (no slashes). Experiment-name should be
@@ -76,7 +76,68 @@
     <arg 
     name="topics_specifiers_columns" 
     default="
-    /data_writer/recorder_status . data_writer_status
+
+    /my_gen3/joint_states .position[0] joint_0_position
+    /my_gen3/joint_states .position[1] joint_1_position
+    /my_gen3/joint_states .position[2] joint_2_position
+    /my_gen3/joint_states .position[3] joint_3_position
+    /my_gen3/joint_states .position[4] joint_4_position
+    /my_gen3/joint_states .position[5] joint_5_position
+    /my_gen3/joint_states .position[6] joint_6_position
+
+    /z_chest_pos .position chest_position
+
+    /my_gen3/base_feedback .actuators[0].fault_bank_a joint_error
+
+    /my_gen3/relaxed_ik/commanded_pose_gcs .position.x commanded_pose_gcs_x
+    /my_gen3/relaxed_ik/commanded_pose_gcs .position.y commanded_pose_gcs_y
+    /my_gen3/relaxed_ik/commanded_pose_gcs .position.z commanded_pose_gcs_z
+    
+    /my_gen3/relaxed_ik/joint_angle_solutions .joint_angles relaxed_ik_angles_solution
+    
+    /my_gen3/positional_control/input_pose .position.x input_pose_x
+    /my_gen3/positional_control/input_pose .position.y input_pose_y
+    /my_gen3/positional_control/input_pose .position.z input_pose_z
+
+    /my_gen3/grasping .data has_grasped
+
+    /my_gen3/pick_and_place .data task_state
+
+    /my_gen3/target_hologram .position.x anchor_to_target_x
+    /my_gen3/target_hologram .position.y anchor_to_target_y
+    /my_gen3/target_hologram .position.z anchor_to_target_z
+
+    /my_gen3/tf_base_tool_frame .position.x base_to_tool_frame_x
+    /my_gen3/tf_base_tool_frame .position.y base_to_tool_frame_y
+    /my_gen3/tf_base_tool_frame .position.z base_to_tool_frame_z
+
+    /my_gen3/target_workspace_cam .x camera_to_target_x
+    /my_gen3/target_workspace_cam .y camera_to_target_y
+    /my_gen3/target_workspace_cam .z camera_to_target_z
+
+    /my_gen3/tf_base_target_cam  .position.x base_to_target_x
+    /my_gen3/tf_base_target_cam  .position.y base_to_target_y
+    /my_gen3/tf_base_target_cam  .position.z base_to_target_z
+
+    /workspace_cam/target_position_in_frame .data[0] target_position_fov_x
+    /workspace_cam/target_position_in_frame .data[1] target_position_fov_y
+
+    /user_control .data user
+    /remote_interface/buttons .data button_pressed
+    
+    /target_counter .data target_number
+    /target_identifier .id target_id
+    /target_identifier .name target_name
+    /target_identifier .expiration target_expiration
+
+    /remote_interface/gaze .data[0] gaze_x
+    /remote_interface/gaze .data[1] gaze_y
+
+    /remote_interface/pupil_diameter .data[0] right_pupil_diameter
+    /remote_interface/pupil_diameter .data[1] left_pupil_diameter
+
+    /remote_interface/calibrated_pupil_diameter .data[0] calibrated_right_pupil_diameter
+    /remote_interface/calibrated_pupil_diameter .data[1] calibrated_left_pupil_diameter
     "/>
     <!-- default="$(find data_collector)/topics_specifiers_columns.yaml"/> -->
 

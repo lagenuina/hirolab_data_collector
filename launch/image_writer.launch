@@ -36,7 +36,7 @@
      -->
     <arg
     name="output_folder_path" 
-    default=""/>
+    default="/home/fetch/data"/>
 
     <!-- Output file name: the file name in the following format:
     "experiment-name_p0_m0_t0.png" (no slashes). Experiment-name should be

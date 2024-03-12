@@ -222,12 +222,12 @@ class ImageWriter:
         """
         
         """
-
         try:
             self.__cv_image = self.__BRIDGE.imgmsg_to_cv2(
                 message,
                 'bgr8',
             )
+
             # # TODO: Uncomment if the image appears bluish:
             # self.__cv_image = cvtColor(
             #     self.__cv_image,

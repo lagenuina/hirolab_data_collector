@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- ============================ SETTINGS ============================= -->
+
+    <arg name="participant" default=""/>
+    <arg name="mode" default=""/>
+    <arg name="trial" default=""/>
+
+    <arg name="camera_name" default="chest_cam"/>
+    <arg name="image_topic" default="/chest_cam/remote_interface"/>
+
+    <!-- ======================== END OF SETTINGS ========================== -->
+    
+    <!-- Data writer: -->     
+    <include 
+        file="$(find data_collector)/launch/data_writer.launch">
+        <arg 
+            name="output_file_name" 
+            value="iros-hololens-2024_p$(arg participant)_m$(arg mode)_t$(arg trial).csv"/>
+    </include>
+    
+    <!-- Image writer: -->     
+    <include file="$(find data_collector)/launch/image_writer.launch">
+        <arg 
+            name="output_file_name" 
+            value="iros-hololens-2024_p$(arg participant)_m$(arg mode)_t$(arg trial).png"/>
+        <arg 
+            name="camera_name" 
+            value="$(arg camera_name)"/>
+        <arg 
+            name="image_topic" 
+            value="$(arg image_topic)"/>
+    </include>
+    
+</launch>

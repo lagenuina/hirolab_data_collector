@@ -48,7 +48,7 @@
     <!-- Image writing period: time [seconds] between file writings. -->
     <arg 
     name="image_writing_period" 
-    default="0.5"/>
+    default="1"/>
 
     <!-- Camera name: used as a namespace for the node. -->
     <arg 

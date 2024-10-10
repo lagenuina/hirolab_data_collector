@@ -2,11 +2,9 @@
 <launch>
     <!-- ============================ SETTINGS ============================= -->
 
-    <!-- Node frequency: the frequency [Hz] which rate.sleep() function will
-    attempt to maintain in the main_loop. -->
     <arg 
     name="node_frequency" 
-    default="1000"/>
+    default="500"/>
 
     <!-- Output folder path: the absolute path to the main data folder (no slash
     at the end). The standard file stucture will be generated in this folder:
@@ -77,6 +75,77 @@
     name="topics_specifiers_columns" 
     default="
 
+    /performance_model/reward_capability_1 .data[0] 1_reward_capability_1
+    /performance_model/reward_capability_1 .data[1] 2_reward_capability_1
+
+    /performance_model/reward_capability_2 .data[0] 1_reward_capability_2
+    /performance_model/reward_capability_2 .data[1] 2_reward_capability_2
+
+    /performance_model/reward_capability_3 .data[0] 1_reward_capability_3
+    /performance_model/reward_capability_3 .data[1] 2_reward_capability_3
+
+    /performance_model/total_reward .data[0] 1_total_reward_capability
+    /performance_model/total_reward .data[1] 2_total_reward_capability
+
+    /performance_model/reward_speed .data[0] 1_reward_speed
+    /performance_model/reward_speed .data[1] 2_reward_speed
+
+    /performance_model/cost .data[0] 1_cost
+    /performance_model/cost .data[1] 2_cost
+
+    /performance_model/expected_reward .data[0] 1_expected_reward
+    /performance_model/expected_reward .data[1] 2_expected_reward
+
+    /performance_model/operator_failure_times .data[0] 1_total_time_failure
+    /performance_model/operator_failure_times .data[1] 2_total_time_failure
+
+    /performance_model/assigned_to .data assigned_to
+
+    /performance_model/total_failures_assigned .data[0] 1_total_failures
+    /performance_model/total_failures_assigned .data[1] 2_total_failures
+    
+    /performance_model/failure_allocation .data failure_allocation
+
+    /performance_model/remote_bound_1 .data[0] remote_lower_bound_1
+    /performance_model/remote_bound_1 .data[1] remote_upper_bound_1
+    /performance_model/local_bound_1 .data[0] local_lower_bound_1
+    /performance_model/local_bound_1 .data[1] local_upper_bound_1
+    /performance_model/remote_bound_2 .data[0] remote_lower_bound_2
+    /performance_model/remote_bound_2 .data[1] remote_upper_bound_2
+    /performance_model/local_bound_2 .data[0] local_lower_bound_2
+    /performance_model/local_bound_2 .data[1] local_upper_bound_2
+    /performance_model/remote_bound_3 .data[0] remote_lower_bound_3
+    /performance_model/remote_bound_3 .data[1] remote_upper_bound_3
+    /performance_model/local_bound_3 .data[0] local_lower_bound_3
+    /performance_model/local_bound_3 .data[1] local_upper_bound_3
+
+    /mode .data mode
+
+    /task_manager/target_counter .data target_number
+    /task_manager/target_identifier .id target_id
+    /task_manager/target_identifier .name target_name
+    /task_manager/target_identifier .expiration target_expiration
+    
+    /my_gen3/robot_control/current_task_state .data task_state
+
+    /performance_model/failure_id .data failure_id
+    /performance_model/failure_start_time .data failure_start_time
+    /performance_model/failure_end_time .data failure_end_time
+    /performance_model/failure_state .data failure_state
+    /performance_model/failure_durations .data failure_durations
+    /performance_model/success .data is_success
+
+    /performance_model/task_requirements .data[0] requirement_1
+    /performance_model/task_requirements .data[1] requirement_2
+    /performance_model/task_requirements .data[2] requirement_3
+
+    /performance_model/adjusted_threshold .data adjusted_threshold
+
+    /object_tracker/error_code .data error_code
+    /object_tracker/restocking .data restocking
+
+    /remote_interface/buttons .data button_pressed
+
     /my_gen3/joint_states .position[0] joint_0_position
     /my_gen3/joint_states .position[1] joint_1_position
     /my_gen3/joint_states .position[2] joint_2_position
@@ -85,7 +154,7 @@
     /my_gen3/joint_states .position[5] joint_5_position
     /my_gen3/joint_states .position[6] joint_6_position
 
-    /z_chest_pos .position chest_position
+    /chest_logger/current_position .data chest_position
 
     /my_gen3/base_feedback .actuators[0].fault_bank_a joint_error
 
@@ -99,14 +168,16 @@
     /my_gen3/positional_control/input_pose .position.y input_pose_y
     /my_gen3/positional_control/input_pose .position.z input_pose_z
 
-    /my_gen3/grasping .data has_grasped
-
-    /my_gen3/pick_and_place .data task_state
+    /my_gen3/gripper_control/force_grasping_status .data grasping
 
     /my_gen3/target_hologram .position.x anchor_to_target_x
     /my_gen3/target_hologram .position.y anchor_to_target_y
     /my_gen3/target_hologram .position.z anchor_to_target_z
 
+    /my_gen3/tf_chest_cam_anchor .position.x anchor_to_camera_x
+    /my_gen3/tf_chest_cam_anchor .position.y anchor_to_camera_y
+    /my_gen3/tf_chest_cam_anchor .position.z anchor_to_camera_z
+    
     /my_gen3/tf_base_tool_frame .position.x base_to_tool_frame_x
     /my_gen3/tf_base_tool_frame .position.y base_to_tool_frame_y
     /my_gen3/tf_base_tool_frame .position.z base_to_tool_frame_z
@@ -121,23 +192,6 @@
 
     /workspace_cam/target_position_in_frame .data[0] target_position_fov_x
     /workspace_cam/target_position_in_frame .data[1] target_position_fov_y
-
-    /user_control .data user
-    /remote_interface/buttons .data button_pressed
-    
-    /target_counter .data target_number
-    /target_identifier .id target_id
-    /target_identifier .name target_name
-    /target_identifier .expiration target_expiration
-
-    /remote_interface/gaze .data[0] gaze_x
-    /remote_interface/gaze .data[1] gaze_y
-
-    /remote_interface/pupil_diameter .data[0] right_pupil_diameter
-    /remote_interface/pupil_diameter .data[1] left_pupil_diameter
-
-    /remote_interface/calibrated_pupil_diameter .data[0] calibrated_right_pupil_diameter
-    /remote_interface/calibrated_pupil_diameter .data[1] calibrated_left_pupil_diameter
     "/>
     <!-- default="$(find data_collector)/topics_specifiers_columns.yaml"/> -->
 
